@@ -4,7 +4,8 @@
     "builder": "DOCKERFILE"
   },
   "deploy": {
-    "startCommand": "/bin/sh -c \"npm run db:deploy && npm run start:prod\"",
+    "preDeployCommand": ["npm run db:deploy"],
+    "startCommand": "node dist/main.js",
     "healthcheckPath": "/"
   }
 }
