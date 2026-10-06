@@ -19,9 +19,13 @@ let command = process.argv
 if (!process.env.DATABASE_CONNECTION_URI && process.env.DATABASE_URL) {
   process.env.DATABASE_CONNECTION_URI = process.env.DATABASE_URL;
 }
+if (!process.env.DATABASE_URL && process.env.DATABASE_CONNECTION_URI) {
+  process.env.DATABASE_URL = process.env.DATABASE_CONNECTION_URI;
+}
 
 if (!process.env.DATABASE_CONNECTION_URI && command.includes('generate')) {
   process.env.DATABASE_CONNECTION_URI = 'postgresql://dummy:dummy@localhost:5432/dummy';
+  process.env.DATABASE_URL = process.env.DATABASE_CONNECTION_URI;
 }
 
 if (command.includes('rmdir') && existsSync('prisma\\migrations')) {

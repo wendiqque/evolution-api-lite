@@ -1,7 +1,7 @@
 FROM node:20-alpine AS builder
 
 RUN apk update && \
-    apk add git wget curl bash openssl
+    apk add git wget curl bash openssl dos2unix libc6-compat
 
 LABEL version="2.2.1" description="Api to control whatsapp features through http requests." 
 LABEL maintainer="Davidson Gomes" git="https://github.com/DavidsonGomes"
@@ -9,9 +9,9 @@ LABEL contact="contato@atendai.com"
 
 WORKDIR /evolution
 
-COPY ./package.json ./tsconfig.json ./
+COPY ./package.json ./package-lock.json* ./tsconfig.json* ./.npmrc* ./
 
-RUN npm install
+RUN npm install --legacy-peer-deps
 
 COPY ./src ./src
 COPY ./public ./public
@@ -122,7 +122,7 @@ RUN npm run build
 FROM node:20-alpine AS final
 
 RUN apk update && \
-    apk add tzdata bash openssl
+    apk add tzdata bash openssl libc6-compat
 
 ENV TZ=America/Sao_Paulo
 
