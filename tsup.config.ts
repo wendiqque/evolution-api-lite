@@ -10,6 +10,11 @@ export default defineConfig({
   clean: true,
   minify: true,
   format: ['cjs', 'esm'],
+  outExtension({ format }) {
+    return {
+      js: format === 'esm' ? '.mjs' : '.js',
+    };
+  },
   onSuccess: async () => {
     cpSync('src/utils/translations', 'dist/translations', { recursive: true });
   },

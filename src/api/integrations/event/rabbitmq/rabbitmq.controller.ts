@@ -19,41 +19,45 @@ export class RabbitmqController extends EventController implements EventControll
       return;
     }
 
-    await new Promise<void>((resolve, reject) => {
-      const uri = configService.get<Rabbitmq>('RABBITMQ').URI;
-      const rabbitmqExchangeName = configService.get<Rabbitmq>('RABBITMQ').EXCHANGE_NAME;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const uri = configService.get<Rabbitmq>('RABBITMQ').URI;
+        const rabbitmqExchangeName = configService.get<Rabbitmq>('RABBITMQ').EXCHANGE_NAME;
 
-      amqp.connect(uri, (error, connection) => {
-        if (error) {
-          reject(error);
-
-          return;
-        }
-
-        connection.createChannel((channelError, channel) => {
-          if (channelError) {
-            reject(channelError);
-
+        amqp.connect(uri, (error, connection) => {
+          if (error) {
+            this.logger.error('AMQP connection error: ' + error.message);
+            resolve();
             return;
           }
 
-          const exchangeName = rabbitmqExchangeName;
+          connection.createChannel((channelError, channel) => {
+            if (channelError) {
+              this.logger.error('AMQP channel error: ' + channelError.message);
+              resolve();
+              return;
+            }
 
-          channel.assertExchange(exchangeName, 'topic', {
-            durable: true,
-            autoDelete: false,
+            const exchangeName = rabbitmqExchangeName;
+
+            channel.assertExchange(exchangeName, 'topic', {
+              durable: true,
+              autoDelete: false,
+            });
+
+            this.amqpChannel = channel;
+
+            this.logger.info('AMQP initialized');
+
+            resolve();
           });
-
-          this.amqpChannel = channel;
-
-          this.logger.info('AMQP initialized');
-
-          resolve();
         });
+      }).then(() => {
+        if (configService.get<Rabbitmq>('RABBITMQ')?.GLOBAL_ENABLED) this.initGlobalQueues();
       });
-    }).then(() => {
-      if (configService.get<Rabbitmq>('RABBITMQ')?.GLOBAL_ENABLED) this.initGlobalQueues();
-    });
+    } catch (error) {
+      this.logger.error('AMQP initialization caught error: ' + error?.message);
+    }
   }
 
   private set channel(channel: amqp.Channel) {

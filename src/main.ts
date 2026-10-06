@@ -149,4 +149,7 @@ async function bootstrap() {
   onUnexpectedError();
 }
 
-bootstrap();
+bootstrap().catch((error) => {
+  console.error('FATAL SERVER BOOTSTRAP ERROR:', error);
+  process.exit(1);
+});
