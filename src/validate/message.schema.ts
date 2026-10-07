@@ -72,6 +72,7 @@ export const textMessageSchema: JSONSchema7 = {
     number: { ...numberDefinition },
     text: { type: 'string' },
     linkPreview: { type: 'boolean' },
+    transient: { type: 'boolean', description: 'Do not save the sent message or emit SEND_MESSAGE' },
     delay: {
       type: 'integer',
       description: 'Enter a value in milliseconds',

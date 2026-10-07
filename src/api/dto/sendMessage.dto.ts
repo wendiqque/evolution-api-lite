@@ -14,6 +14,9 @@ export class Options {
   mentionsEveryOne?: boolean;
   mentioned?: string[];
   webhookUrl?: string;
+  // Send only: the message is not saved, not sent as a SEND_MESSAGE event and its content is not
+  // logged. For one-time codes and other secrets.
+  transient?: boolean;
 }
 
 export class MediaMessage {
@@ -44,6 +47,7 @@ export class Metadata {
   mentionsEveryOne?: boolean;
   mentioned?: string[];
   encoding?: boolean;
+  transient?: boolean;
 }
 
 export class SendTextDto extends Metadata {

@@ -1873,6 +1873,11 @@ export class BaileysStartupService extends ChannelStartupService {
 
       const messageRaw = this.prepareMessage(messageSent);
 
+      if (options?.transient) {
+        this.logger.log(`Transient message ${messageRaw.key?.id} sent to ${sender}`);
+        return messageRaw;
+      }
+
       const isMedia =
         messageSent?.message?.imageMessage ||
         messageSent?.message?.videoMessage ||
@@ -2053,6 +2058,7 @@ export class BaileysStartupService extends ChannelStartupService {
         linkPreview: data?.linkPreview,
         mentionsEveryOne: data?.mentionsEveryOne,
         mentioned: data?.mentioned,
+        transient: data?.transient,
       },
     );
   }
