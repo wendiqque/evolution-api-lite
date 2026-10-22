@@ -20,7 +20,7 @@ export class RabbitmqController extends EventController implements EventControll
     }
 
     try {
-      await new Promise<void>((resolve, reject) => {
+      await new Promise<void>((resolve) => {
         const uri = configService.get<Rabbitmq>('RABBITMQ').URI;
         const rabbitmqExchangeName = configService.get<Rabbitmq>('RABBITMQ').EXCHANGE_NAME;
 
