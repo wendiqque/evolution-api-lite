@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:24.22.1-alpine AS builder
 
 RUN apk update && \
     apk add git wget curl bash openssl dos2unix libc6-compat
@@ -119,7 +119,7 @@ RUN ./Docker/scripts/generate_database.sh
 
 RUN npm run build
 
-FROM node:20-alpine AS final
+FROM node:24.22.1-alpine AS final
 
 RUN apk update && \
     apk add tzdata bash openssl libc6-compat
