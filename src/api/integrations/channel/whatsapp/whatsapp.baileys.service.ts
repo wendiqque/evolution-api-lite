@@ -522,7 +522,8 @@ export class BaileysStartupService extends ChannelStartupService {
     const socketConfig: UserFacingSocketConfig = {
       ...options,
       version,
-      logger: P({ level: this.logBaileys }),
+      // Baileys logs errors under `error`, which pino prints as {} without a serializer
+      logger: P({ level: this.logBaileys, serializers: { error: P.stdSerializers.err } }),
       printQRInTerminal: false,
       auth: {
         creds: this.instance.authState.state.creds,
