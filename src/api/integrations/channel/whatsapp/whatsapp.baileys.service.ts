@@ -99,10 +99,12 @@ import makeWASocket, {
   getContentType,
   getDevice,
   GroupMetadata,
+  GroupParticipant,
   isJidBroadcast,
   isJidGroup,
   isJidNewsletter,
-  isJidUser,
+  isLidUser,
+  isPnUser,
   makeCacheableSignalKeyStore,
   MessageUpsertType,
   MessageUserReceiptUpdate,
@@ -1276,10 +1278,18 @@ export class BaileysStartupService extends ChannelStartupService {
 
     'group-participants.update': (participantsUpdate: {
       id: string;
-      participants: string[];
+      author: string;
+      authorPn?: string;
+      participants: GroupParticipant[];
       action: ParticipantAction;
     }) => {
-      this.sendDataWebhook(Events.GROUP_PARTICIPANTS_UPDATE, participantsUpdate);
+      // Baileys 7 gives participant objects; the webhook keeps `participants` as JID strings and adds
+      // the objects (with phone numbers for LID participants) as `participantsData`
+      this.sendDataWebhook(Events.GROUP_PARTICIPANTS_UPDATE, {
+        ...participantsUpdate,
+        participants: participantsUpdate.participants.map((participant) => participant.id),
+        participantsData: participantsUpdate.participants,
+      });
 
       this.updateGroupMetadataCache(participantsUpdate.id);
     },
@@ -1578,17 +1588,10 @@ export class BaileysStartupService extends ChannelStartupService {
     }
   }
 
+  // Baileys 7 dropped offerCall/terminateCall, so placing calls is no longer supported
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   public async offerCall({ number, isVideo, callDuration }: OfferCallDto) {
-    const jid = createJid(number);
-
-    try {
-      const call = await this.client.offerCall(jid, isVideo);
-      setTimeout(() => this.client.terminateCall(call.id, call.to), callDuration * 1000);
-
-      return call;
-    } catch (error) {
-      return error;
-    }
+    throw new BadRequestException('Placing calls is not supported');
   }
 
   private async sendMessage(
@@ -1631,7 +1634,7 @@ export class BaileysStartupService extends ChannelStartupService {
       m.key = {
         id: id,
         remoteJid: sender,
-        participant: isJidUser(sender) ? sender : undefined,
+        participant: isPnUser(sender) ? sender : undefined,
         fromMe: true,
       };
       for (const [key, value] of Object.entries(m)) {
@@ -1817,7 +1820,7 @@ export class BaileysStartupService extends ChannelStartupService {
       if (options?.quoted) {
         const m = options?.quoted;
 
-        const msg = m?.message ? m : ((await this.getMessage(m.key, true)) as proto.IWebMessageInfo);
+        const msg = m?.message ? m : ((await this.getMessage(m.key, true)) as WAMessage);
 
         if (msg) {
           quoted = msg;
@@ -2874,7 +2877,7 @@ export class BaileysStartupService extends ChannelStartupService {
     try {
       const keys: proto.IMessageKey[] = [];
       data.readMessages.forEach((read) => {
-        if (isJidGroup(read.remoteJid) || isJidUser(read.remoteJid)) {
+        if (isJidGroup(read.remoteJid) || isPnUser(read.remoteJid) || isLidUser(read.remoteJid)) {
           keys.push({
             remoteJid: read.remoteJid,
             fromMe: read.fromMe,
@@ -3048,7 +3051,7 @@ export class BaileysStartupService extends ChannelStartupService {
     try {
       const m = data?.message;
 
-      const msg = m?.message ? m : ((await this.getMessage(m.key, true)) as proto.IWebMessageInfo);
+      const msg = m?.message ? m : ((await this.getMessage(m.key, true)) as WAMessage);
 
       if (!msg) {
         throw 'Message not found';
