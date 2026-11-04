@@ -2783,9 +2783,22 @@ export class BaileysStartupService extends ChannelStartupService {
       (jid) => !cachedNumbers.some((cached) => cached.jidOptions.includes(jid)),
     );
 
-    const verify = await this.client.onWhatsApp(...filteredNumbers);
+    // WhatsApp's number lookup only knows phone numbers: a LID (hidden-number address, "123@lid")
+    // always comes back as not on WhatsApp, so LIDs skip it. A LID only reaches us from a chat the
+    // person started, so it is on WhatsApp and Baileys can send to it.
+    const phoneNumbers = filteredNumbers.filter((jid) => !jid.includes('@lid'));
+    const verify = phoneNumbers.length ? await this.client.onWhatsApp(...phoneNumbers) : [];
     const users: OnWhatsAppDto[] = await Promise.all(
       jids.users.map(async (user) => {
+        if (user.jid.includes('@lid')) {
+          return {
+            exists: true,
+            jid: user.jid,
+            name: contacts.find((c) => c.remoteJid === user.jid)?.pushName,
+            number: user.number,
+          };
+        }
+
         let numberVerified: (typeof verify)[0] | null = null;
 
         const cached = cachedNumbers.find((cached) => cached.jidOptions.includes(user.jid.replace('+', '')));
