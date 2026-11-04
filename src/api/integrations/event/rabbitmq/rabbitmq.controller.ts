@@ -6,8 +6,16 @@ import * as amqp from 'amqplib/callback_api';
 
 import { EmitData, EventController, EventControllerInterface } from '../event.controller';
 
+// A dropped connection (a proxy cutting an idle link, a broker restart) is replaced, retrying with
+// a growing wait, so events are not lost until the next restart
+const RECONNECT_DELAY_MS = { min: 1000, max: 30 * 1000 };
+
 export class RabbitmqController extends EventController implements EventControllerInterface {
   public amqpChannel: amqp.Channel | null = null;
+  private amqpConnection: amqp.Connection | null = null;
+  private reconnectDelay = RECONNECT_DELAY_MS.min;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+  private droppedEvents = 0;
   private readonly logger = new Logger('RabbitmqController');
 
   constructor(prismaRepository: PrismaRepository, waMonitor: WAMonitoringService) {
@@ -19,45 +27,100 @@ export class RabbitmqController extends EventController implements EventControll
       return;
     }
 
+    await this.connect();
+  }
+
+  // Opens a connection and channel and watches both: when either closes, they are dropped and a
+  // new connection is opened after a wait
+  private async connect(): Promise<void> {
     try {
-      await new Promise<void>((resolve) => {
+      const connected = await new Promise<boolean>((resolve) => {
         const uri = configService.get<Rabbitmq>('RABBITMQ').URI;
         const rabbitmqExchangeName = configService.get<Rabbitmq>('RABBITMQ').EXCHANGE_NAME;
 
         amqp.connect(uri, (error, connection) => {
           if (error) {
             this.logger.error('AMQP connection error: ' + error.message);
-            resolve();
+            resolve(false);
             return;
           }
+
+          connection.on('error', (err) => this.logger.error('AMQP connection error: ' + err?.message));
+          connection.on('close', () => {
+            if (this.amqpConnection === connection) this.dropConnection('connection closed');
+          });
 
           connection.createChannel((channelError, channel) => {
             if (channelError) {
               this.logger.error('AMQP channel error: ' + channelError.message);
-              resolve();
+              connection.close(() => undefined);
+              resolve(false);
               return;
             }
 
-            const exchangeName = rabbitmqExchangeName;
+            channel.on('error', (err) => this.logger.error('AMQP channel error: ' + err?.message));
+            channel.on('close', () => {
+              if (this.amqpChannel === channel) this.dropConnection('channel closed');
+            });
 
-            channel.assertExchange(exchangeName, 'topic', {
+            channel.assertExchange(rabbitmqExchangeName, 'topic', {
               durable: true,
               autoDelete: false,
             });
 
+            this.amqpConnection = connection;
             this.amqpChannel = channel;
+            this.reconnectDelay = RECONNECT_DELAY_MS.min;
+
+            if (this.droppedEvents > 0) {
+              this.logger.warn(`AMQP reconnected; ${this.droppedEvents} events could not be sent while it was down`);
+              this.droppedEvents = 0;
+            }
 
             this.logger.info('AMQP initialized');
 
-            resolve();
+            resolve(true);
           });
         });
-      }).then(() => {
-        if (configService.get<Rabbitmq>('RABBITMQ')?.GLOBAL_ENABLED) this.initGlobalQueues();
       });
+
+      if (!connected) {
+        this.scheduleReconnect();
+        return;
+      }
+
+      if (configService.get<Rabbitmq>('RABBITMQ')?.GLOBAL_ENABLED) this.initGlobalQueues();
     } catch (error) {
       this.logger.error('AMQP initialization caught error: ' + error?.message);
+      this.scheduleReconnect();
     }
+  }
+
+  private dropConnection(reason: string): void {
+    if (!this.amqpConnection && !this.amqpChannel) return;
+
+    this.logger.warn(`AMQP ${reason}; reconnecting`);
+    const connection = this.amqpConnection;
+    this.amqpChannel = null;
+    this.amqpConnection = null;
+    try {
+      connection?.close(() => undefined);
+    } catch {
+      // Already closed
+    }
+    this.scheduleReconnect();
+  }
+
+  private scheduleReconnect(): void {
+    if (this.reconnectTimer) return;
+
+    const wait = this.reconnectDelay;
+    this.reconnectDelay = Math.min(this.reconnectDelay * 2, RECONNECT_DELAY_MS.max);
+    this.logger.warn(`AMQP reconnecting in ${wait / 1000}s`);
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.connect();
+    }, wait);
   }
 
   private set channel(channel: amqp.Channel) {
@@ -104,6 +167,12 @@ export class RabbitmqController extends EventController implements EventControll
       sender,
       apikey: apiKey,
     };
+
+    if (instanceRabbitmq?.enabled && !this.amqpChannel && Array.isArray(rabbitmqLocal) && rabbitmqLocal.includes(we)) {
+      if (this.droppedEvents === 0)
+        this.logger.warn(`AMQP is not connected; ${event} for ${instanceName} was not sent`);
+      this.droppedEvents++;
+    }
 
     if (instanceRabbitmq?.enabled && this.amqpChannel) {
       if (Array.isArray(rabbitmqLocal) && rabbitmqLocal.includes(we)) {

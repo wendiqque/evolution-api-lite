@@ -1,3 +1,20 @@
+# 2.2.2 (2026-11-05 12:00)
+
+### Features
+
+* Upgraded to Baileys 7 (7.0.0-rc14): incoming messages now carry the sender's phone number alongside their hidden-number address (LID), so replies reach people whose number WhatsApp hides
+* Messages can be sent as transient, so their text is not stored (for one-time codes and links)
+* Baileys errors are logged in full instead of as an empty object
+
+### Fixed
+
+* Reconnects to RabbitMQ after a dropped connection or channel, with a 1s to 30s wait between tries, instead of losing every event until the next restart; events that could not be sent meanwhile are logged and counted
+* Sending to a hidden-number address (LID) no longer fails as "not on WhatsApp"
+* Read receipts are also sent in hidden-number (LID) chats
+* Group participant updates keep the participants as a list of IDs and add the full details as participantsData
+* Placing calls now answers 400, as Baileys 7 no longer supports it
+* Runs on Node 24, with dependency security fixes
+
 # 2.2.1 (2025-01-22 14:37)
 
 ### Features
